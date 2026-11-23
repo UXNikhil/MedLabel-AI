@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+venv/
+.venv/
+env/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.stage2_backup/
+*.tsbuildinfo
