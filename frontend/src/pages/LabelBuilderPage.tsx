@@ -447,7 +447,7 @@ export const LabelBuilderPage: React.FC = () => {
               textAlign: 'center',
               marginBottom: '16px'
             }}>
-              ⚠️ MEDLABEL AI HACKATHON PROTOTYPE ONLY — NOT OFFICIAL FDA / CDSCO / CE APPROVAL
+              ⚠️ MEDLABEL AI REGULATORY DRAFT SPECIFICATION — NOT OFFICIAL FDA / CDSCO / CE APPROVAL
             </div>
 
             {/* Visual Medical Label Canvas */}

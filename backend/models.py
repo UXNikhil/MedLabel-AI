@@ -159,3 +159,57 @@ class StatutoryRuleOut(BaseModel):
     source_url: str
     applicability: str
     severity: str
+
+# ==============================================================================
+# Stage 3 Models — Review Queue, Approvals & Immutable Audit Logging
+# ==============================================================================
+
+class ReviewDecisionCreate(BaseModel):
+    project_id: str
+    decision: str = Field(..., description="'approved', 'rejected', or 'changes_requested'")
+    comments: str
+    reviewer_id: Optional[str] = None
+    reviewer_name: Optional[str] = None
+    reviewer_email: Optional[str] = None
+    reviewer_role: Optional[str] = "reviewer"
+
+class ReviewOut(BaseModel):
+    id: str
+    project_id: str
+    reviewer_id: str
+    reviewer_name: str
+    reviewer_email: str
+    decision: str
+    comments: str
+    version_tag: str
+    created_at: str
+
+class AuditLogCreate(BaseModel):
+    actor_id: Optional[str] = None
+    actor_email: str
+    actor_name: Optional[str] = None
+    actor_role: str = "editor"
+    action: str
+    entity_type: str
+    entity_id: Optional[str] = None
+    details: Dict[str, Any] = {}
+    ip_address: Optional[str] = "127.0.0.1"
+
+class AuditLogOut(BaseModel):
+    id: str
+    actor_id: Optional[str] = None
+    actor_email: str
+    actor_name: Optional[str] = None
+    actor_role: str
+    action: str
+    entity_type: str
+    entity_id: Optional[str] = None
+    details: Dict[str, Any] = {}
+    ip_address: Optional[str] = "127.0.0.1"
+    created_at: str
+
+class SubmitForReviewRequest(BaseModel):
+    project_id: str
+    user_id: str
+    notes: Optional[str] = None
+

@@ -1,7 +1,7 @@
 -- ==============================================================================
 -- MedLabel AI — Stage 1 Database Schema with Row Level Security (RLS)
 -- Destination Markets: India (CDSCO), USA (FDA 21 CFR Part 801), EU (MDR 2017/745)
--- Note: Prototype application for hackathon validation; not official certification.
+-- Note: Prototype application for regulatory validation; not official certification.
 -- ==============================================================================
 
 -- 1. Profiles & Roles Table
@@ -130,32 +130,39 @@ ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.label_projects ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile"
     ON public.profiles FOR SELECT
     USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
     ON public.profiles FOR UPDATE
     USING (auth.uid() = id);
 
 -- Devices Policies
+DROP POLICY IF EXISTS "Users can view own devices" ON public.devices;
 CREATE POLICY "Users can view own devices"
     ON public.devices FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own devices" ON public.devices;
 CREATE POLICY "Users can insert own devices"
     ON public.devices FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own devices" ON public.devices;
 CREATE POLICY "Users can update own devices"
     ON public.devices FOR UPDATE
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own devices" ON public.devices;
 CREATE POLICY "Users can delete own devices"
     ON public.devices FOR DELETE
     USING (auth.uid() = user_id);
 
 -- Label Projects Policies
+DROP POLICY IF EXISTS "Users can view own label projects" ON public.label_projects;
 CREATE POLICY "Users can view own label projects"
     ON public.label_projects FOR SELECT
     USING (
@@ -167,10 +174,12 @@ CREATE POLICY "Users can view own label projects"
         )
     );
 
+DROP POLICY IF EXISTS "Users can insert own label projects" ON public.label_projects;
 CREATE POLICY "Users can insert own label projects"
     ON public.label_projects FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own label projects" ON public.label_projects;
 CREATE POLICY "Users can update own label projects"
     ON public.label_projects FOR UPDATE
     USING (
@@ -182,6 +191,7 @@ CREATE POLICY "Users can update own label projects"
         )
     );
 
+DROP POLICY IF EXISTS "Users can delete own label projects" ON public.label_projects;
 CREATE POLICY "Users can delete own label projects"
     ON public.label_projects FOR DELETE
     USING (auth.uid() = user_id);
@@ -259,34 +269,124 @@ ALTER TABLE public.compliance_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.label_comparisons ENABLE ROW LEVEL SECURITY;
 
 -- Compliance Rules: Public read for authenticated users
+DROP POLICY IF EXISTS "Authenticated users can read compliance rules" ON public.compliance_rules;
 CREATE POLICY "Authenticated users can read compliance rules"
     ON public.compliance_rules FOR SELECT
     TO authenticated
     USING (true);
 
 -- Label Versions RLS
+DROP POLICY IF EXISTS "Users can view own label versions" ON public.label_versions;
 CREATE POLICY "Users can view own label versions"
     ON public.label_versions FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own label versions" ON public.label_versions;
 CREATE POLICY "Users can insert own label versions"
     ON public.label_versions FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 -- Compliance Reports RLS
+DROP POLICY IF EXISTS "Users can view own compliance reports" ON public.compliance_reports;
 CREATE POLICY "Users can view own compliance reports"
     ON public.compliance_reports FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own compliance reports" ON public.compliance_reports;
 CREATE POLICY "Users can insert own compliance reports"
     ON public.compliance_reports FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
 -- Label Comparisons RLS
+DROP POLICY IF EXISTS "Users can view own label comparisons" ON public.label_comparisons;
 CREATE POLICY "Users can view own label comparisons"
     ON public.label_comparisons FOR SELECT
     USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own label comparisons" ON public.label_comparisons;
 CREATE POLICY "Users can insert own label comparisons"
     ON public.label_comparisons FOR INSERT
     WITH CHECK (auth.uid() = user_id);
+
+-- ==============================================================================
+-- MedLabel AI — Stage 3 Database Schema Extensions
+-- Tables: reviews, audit_logs
+-- Multi-Tenant RLS & Append-Only Immutable Audit Security
+-- ==============================================================================
+
+-- 1. Update label_projects check constraint to include 'changes_requested'
+ALTER TABLE public.label_projects 
+DROP CONSTRAINT IF EXISTS label_projects_status_check;
+
+ALTER TABLE public.label_projects 
+ADD CONSTRAINT label_projects_status_check 
+CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'changes_requested'));
+
+-- 2. Reviews Table (Stage 3 Formal Approvals & Change Requests)
+CREATE TABLE IF NOT EXISTS public.reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES public.label_projects(id) ON DELETE CASCADE,
+    reviewer_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    reviewer_name TEXT NOT NULL,
+    reviewer_email TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('approved', 'rejected', 'changes_requested')),
+    comments TEXT NOT NULL,
+    version_tag TEXT NOT NULL DEFAULT 'v1.0-draft',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3. Audit Logs Table (Append-Only, Immutable Regulatory Traceability)
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    actor_email TEXT NOT NULL,
+    actor_name TEXT,
+    actor_role TEXT NOT NULL DEFAULT 'editor',
+    action TEXT NOT NULL, -- e.g. 'DEVICE_CREATED', 'LABEL_GENERATED', 'COMPLIANCE_RUN', 'REVIEW_SUBMITTED', 'REVIEW_APPROVED', 'CHANGES_REQUESTED', 'PDF_EXPORTED'
+    entity_type TEXT NOT NULL, -- 'device', 'project', 'label_version', 'compliance_report', 'review'
+    entity_id TEXT,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ip_address TEXT DEFAULT '127.0.0.1',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes for Stage 3
+CREATE INDEX IF NOT EXISTS idx_reviews_project_id ON public.reviews(project_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_reviewer_id ON public.reviews(reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON public.audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_type ON public.audit_logs(entity_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
+
+-- Enable RLS
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Reviews RLS Policies
+DROP POLICY IF EXISTS "Authenticated users can view reviews" ON public.reviews;
+CREATE POLICY "Authenticated users can view reviews"
+    ON public.reviews FOR SELECT
+    TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "Reviewers and Admins can insert reviews" ON public.reviews;
+CREATE POLICY "Reviewers and Admins can insert reviews"
+    ON public.reviews FOR INSERT
+    WITH CHECK (auth.uid() = reviewer_id);
+
+-- Immutable: NO UPDATE and NO DELETE policies on reviews!
+
+-- Audit Logs RLS Policies: Strictly Append-Only
+DROP POLICY IF EXISTS "Authenticated users can read audit logs" ON public.audit_logs;
+CREATE POLICY "Authenticated users can read audit logs"
+    ON public.audit_logs FOR SELECT
+    TO authenticated
+    USING (true);
+
+DROP POLICY IF EXISTS "System and users can insert audit logs" ON public.audit_logs;
+CREATE POLICY "System and users can insert audit logs"
+    ON public.audit_logs FOR INSERT
+    WITH CHECK (true);
+
+-- Immutable: NO UPDATE and NO DELETE policies on audit_logs!
+

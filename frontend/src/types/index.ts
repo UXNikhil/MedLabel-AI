@@ -12,7 +12,7 @@ export type DestinationMarket = 'India' | 'USA' | 'EU';
 
 export type PackagingLevel = 'primary' | 'secondary' | 'shipper';
 
-export type ProjectStatus = 'draft' | 'in_review' | 'approved' | 'rejected';
+export type ProjectStatus = 'draft' | 'in_review' | 'approved' | 'rejected' | 'changes_requested';
 
 export interface Device {
   id: string;
@@ -153,3 +153,36 @@ export interface UploadExtractionData {
   };
   notes: string;
 }
+
+// ==============================================================================
+// Stage 3 Types — Formal Review Queue, Approvals & Immutable Audit Logging
+// ==============================================================================
+
+export type ReviewDecision = 'approved' | 'rejected' | 'changes_requested';
+
+export interface ReviewItem {
+  id: string;
+  project_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  reviewer_email: string;
+  decision: ReviewDecision;
+  comments: string;
+  version_tag: string;
+  created_at: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actor_id?: string;
+  actor_email: string;
+  actor_name?: string;
+  actor_role: UserRole;
+  action: string;
+  entity_type: string;
+  entity_id?: string;
+  details: Record<string, any>;
+  ip_address?: string;
+  created_at: string;
+}
+

@@ -1,6 +1,6 @@
-# MedLabel AI — Compact PRD (Hackathon V1)
+# MedLabel AI — Product Requirements (v1.0)
 
-**Purpose:** Build a working web app to draft, check, compare, review, and track **medical-device labels** for destination markets **India, USA, and EU**. This is a hackathon prototype, **not** legal certification or an official government product.
+**Purpose:** Build a working web app to draft, check, compare, review, and track **medical-device labels** for destination markets **India, USA, and EU**. This is an engineering prototype, **not** legal certification or an official government product.
 
 **Development:** Google Antigravity; existing `html-template-4.zip` as visual reference; React + Vite + TypeScript frontend; FastAPI/Python backend; Supabase Auth/Postgres/private Storage; Gemini API (backend only); PyMuPDF for PDFs; optional OCR fallback. **No custom ML training.** Keep implementation lightweight for a Windows laptop; do not require Docker. **Do not push to GitHub until owner approves tested V1.**
 

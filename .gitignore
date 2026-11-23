@@ -25,3 +25,6 @@ Thumbs.db
 .idea/
 .stage2_backup/
 *.tsbuildinfo
+*.log
+*.tmp
+.pytest_cache/

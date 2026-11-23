@@ -3,7 +3,6 @@ import { useAuth } from './context/AuthContext';
 import { NavigationTab } from './types';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
-import { AlertBanner } from './components/AlertBanner';
 import { DashboardPage } from './pages/DashboardPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -11,7 +10,8 @@ import { LabelBuilderPage } from './pages/LabelBuilderPage';
 import { CompliancePage } from './pages/CompliancePage';
 import { ComparePage } from './pages/ComparePage';
 import { RuleLibraryPage } from './pages/RuleLibraryPage';
-import { DisabledFeaturePage } from './pages/DisabledFeaturePage';
+import { ReviewQueuePage } from './pages/ReviewQueuePage';
+import { AuditLogPage } from './pages/AuditLogPage';
 import { AuthPage } from './pages/AuthPage';
 
 export const App: React.FC = () => {
@@ -24,7 +24,6 @@ export const App: React.FC = () => {
   if (!user) {
     return (
       <div className="app-shell">
-        <AlertBanner />
         <Header />
         <main id="main-content">
           <AuthPage />
@@ -35,7 +34,6 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-shell">
-      <AlertBanner />
       <Header />
       <Navigation currentTab={currentTab} onSelectTab={setCurrentTab} />
 
@@ -86,11 +84,12 @@ export const App: React.FC = () => {
           <RuleLibraryPage />
         )}
 
-        {(currentTab === 'review' || currentTab === 'audit') && (
-          <DisabledFeaturePage
-            tab={currentTab}
-            onNavigateToDevices={() => setCurrentTab('devices')}
-          />
+        {currentTab === 'review' && (
+          <ReviewQueuePage />
+        )}
+
+        {currentTab === 'audit' && (
+          <AuditLogPage />
         )}
       </main>
     </div>

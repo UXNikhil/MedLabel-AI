@@ -83,32 +83,37 @@ Raw Label Text:
 \"\"\"
 """
         api_key = get_gemini_key()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        payload = {
-            "contents": [
-                {
-                    "parts": [{"text": prompt}]
+        # gemma-4-26b-a4b-it is verified active on current Google AI Studio key; gemini-2.5-flash as alternate
+        models_to_try = ["gemma-4-26b-a4b-it", "gemini-2.5-flash"]
+        for model in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [{"text": prompt}]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.1
                 }
-            ],
-            "generationConfig": {
-                "temperature": 0.1,
-                "responseMimeType": "application/json"
             }
-        }
 
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                res = await client.post(url, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidate_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                    parsed = json.loads(candidate_text)
-                    parsed["extraction_engine"] = "gemini-2.5-flash"
-                    return parsed
-                else:
-                    print(f"[Gemini API Warning] HTTP {res.status_code}: {res.text}")
-        except Exception as e:
-            print(f"[Gemini API Error] {e}")
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    res = await client.post(url, json=payload)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidate_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                        # Clean json markdown if returned
+                        if "```json" in candidate_text:
+                            candidate_text = candidate_text.split("```json")[1].split("```")[0].strip()
+                        elif "```" in candidate_text:
+                            candidate_text = candidate_text.split("```")[1].split("```")[0].strip()
+                        parsed = json.loads(candidate_text)
+                        parsed["extraction_engine"] = model
+                        return parsed
+            except Exception as e:
+                pass
 
         # Fallback if API call fails
         fallback = GeminiService._deterministic_fallback_extractor(raw_text)

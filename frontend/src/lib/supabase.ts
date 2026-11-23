@@ -185,37 +185,34 @@ function saveStoredProjects(items: LabelProject[]) {
 export const dbService = {
   // --- Devices CRUD ---
   async getDevices(): Promise<Device[]> {
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('devices').select('*').order('created_at', { ascending: false });
-        if (!error && data) {
-          return data.map((d: any) => ({
-            id: d.id,
-            userId: d.user_id,
-            name: d.name,
-            modelNumber: d.model_number,
-            manufacturer: d.manufacturer,
-            countryOfOrigin: d.country_of_origin,
-            intendedMarket: d.intended_market,
-            importerName: d.importer_name,
-            importerAddress: d.importer_address,
-            lotNumber: d.lot_number,
-            serialNumber: d.serial_number,
-            manufacturingDate: d.manufacturing_date,
-            expiryDate: d.expiry_date,
-            storageConditions: d.storage_conditions,
-            warningsCautions: d.warnings_cautions,
-            udiDi: d.udi_di,
-            udiPi: d.udi_pi,
-            packagingLevel: d.packaging_level,
-            language: d.language,
-            createdAt: d.created_at,
-            updatedAt: d.updated_at
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase fetch failed, using local store', err);
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('devices').select('*').order('created_at', { ascending: false });
+      if (error) {
+        throw new Error(`Supabase query failed: ${error.message}`);
       }
+      return (data || []).map((d: any) => ({
+        id: d.id,
+        userId: d.user_id,
+        name: d.name,
+        modelNumber: d.model_number,
+        manufacturer: d.manufacturer,
+        countryOfOrigin: d.country_of_origin,
+        intendedMarket: d.intended_market,
+        importerName: d.importer_name,
+        importerAddress: d.importer_address,
+        lotNumber: d.lot_number,
+        serialNumber: d.serial_number,
+        manufacturingDate: d.manufacturing_date,
+        expiryDate: d.expiry_date,
+        storageConditions: d.storage_conditions,
+        warningsCautions: d.warnings_cautions,
+        udiDi: d.udi_di,
+        udiPi: d.udi_pi,
+        packagingLevel: d.packaging_level,
+        language: d.language,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at
+      }));
     }
     return getStoredDevices();
   },
@@ -230,40 +227,37 @@ export const dbService = {
       updatedAt: now
     };
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('devices').insert({
-          id: newId,
-          user_id: device.userId,
-          name: device.name,
-          model_number: device.modelNumber,
-          manufacturer: device.manufacturer,
-          country_of_origin: device.countryOfOrigin,
-          intended_market: device.intendedMarket,
-          importer_name: device.importerName || null,
-          importer_address: device.importerAddress || null,
-          lot_number: device.lotNumber || null,
-          serial_number: device.serialNumber || null,
-          manufacturing_date: device.manufacturingDate || null,
-          expiry_date: device.expiryDate || null,
-          storage_conditions: device.storageConditions || null,
-          warnings_cautions: device.warningsCautions || null,
-          udi_di: device.udiDi || null,
-          udi_pi: device.udiPi || null,
-          packaging_level: device.packagingLevel,
-          language: device.language || 'en'
-        }).select().single();
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('devices').insert({
+        id: newId,
+        user_id: device.userId,
+        name: device.name,
+        model_number: device.modelNumber,
+        manufacturer: device.manufacturer,
+        country_of_origin: device.countryOfOrigin,
+        intended_market: device.intendedMarket,
+        importer_name: device.importerName || null,
+        importer_address: device.importerAddress || null,
+        lot_number: device.lotNumber || null,
+        serial_number: device.serialNumber || null,
+        manufacturing_date: device.manufacturingDate || null,
+        expiry_date: device.expiryDate || null,
+        storage_conditions: device.storageConditions || null,
+        warnings_cautions: device.warningsCautions || null,
+        udi_di: device.udiDi || null,
+        udi_pi: device.udiPi || null,
+        packaging_level: device.packagingLevel,
+        language: device.language || 'en'
+      }).select().single();
 
-        if (!error && data) {
-          return {
-            ...newDevice,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at
-          };
-        }
-      } catch (e) {
-        console.warn('Supabase insert failed, persisting locally', e);
+      if (error) {
+        throw new Error(`Supabase insert failed: ${error.message}`);
       }
+      return {
+        ...newDevice,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     }
 
     const current = getStoredDevices();
@@ -275,31 +269,54 @@ export const dbService = {
   async updateDevice(id: string, updates: Partial<Device>): Promise<Device> {
     const now = new Date().toISOString();
 
-    if (supabase) {
-      try {
-        await supabase.from('devices').update({
-          name: updates.name,
-          model_number: updates.modelNumber,
-          manufacturer: updates.manufacturer,
-          country_of_origin: updates.countryOfOrigin,
-          intended_market: updates.intendedMarket,
-          importer_name: updates.importerName,
-          importer_address: updates.importerAddress,
-          lot_number: updates.lotNumber,
-          serial_number: updates.serialNumber,
-          manufacturing_date: updates.manufacturingDate,
-          expiry_date: updates.expiryDate,
-          storage_conditions: updates.storageConditions,
-          warnings_cautions: updates.warningsCautions,
-          udi_di: updates.udiDi,
-          udi_pi: updates.udiPi,
-          packaging_level: updates.packagingLevel,
-          language: updates.language,
-          updated_at: now
-        }).eq('id', id);
-      } catch (e) {
-        console.warn('Supabase update failed, updating local store', e);
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('devices').update({
+        name: updates.name,
+        model_number: updates.modelNumber,
+        manufacturer: updates.manufacturer,
+        country_of_origin: updates.countryOfOrigin,
+        intended_market: updates.intendedMarket,
+        importer_name: updates.importerName,
+        importer_address: updates.importerAddress,
+        lot_number: updates.lotNumber,
+        serial_number: updates.serialNumber,
+        manufacturing_date: updates.manufacturingDate,
+        expiry_date: updates.expiryDate,
+        storage_conditions: updates.storageConditions,
+        warnings_cautions: updates.warningsCautions,
+        udi_di: updates.udiDi,
+        udi_pi: updates.udiPi,
+        packaging_level: updates.packagingLevel,
+        language: updates.language,
+        updated_at: now
+      }).eq('id', id).select().single();
+
+      if (error) {
+        throw new Error(`Supabase update failed: ${error.message}`);
       }
+      return {
+        id: data.id,
+        userId: data.user_id,
+        name: data.name,
+        modelNumber: data.model_number,
+        manufacturer: data.manufacturer,
+        countryOfOrigin: data.country_of_origin,
+        intendedMarket: data.intended_market,
+        importerName: data.importer_name,
+        importerAddress: data.importer_address,
+        lotNumber: data.lot_number,
+        serialNumber: data.serial_number,
+        manufacturingDate: data.manufacturing_date,
+        expiryDate: data.expiry_date,
+        storageConditions: data.storage_conditions,
+        warningsCautions: data.warnings_cautions,
+        udiDi: data.udi_di,
+        udiPi: data.udi_pi,
+        packagingLevel: data.packaging_level,
+        language: data.language,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     }
 
     const current = getStoredDevices();
@@ -312,12 +329,12 @@ export const dbService = {
   },
 
   async deleteDevice(id: string): Promise<void> {
-    if (supabase) {
-      try {
-        await supabase.from('devices').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase delete failed', e);
+    if (isLiveSupabaseConfigured && supabase) {
+      const { error } = await supabase.from('devices').delete().eq('id', id);
+      if (error) {
+        throw new Error(`Supabase delete failed: ${error.message}`);
       }
+      return;
     }
 
     const currentDevices = getStoredDevices().filter(d => d.id !== id);
@@ -330,33 +347,30 @@ export const dbService = {
 
   // --- Label Projects CRUD ---
   async getProjects(): Promise<LabelProject[]> {
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('label_projects')
-          .select('*, devices(name, model_number)')
-          .order('created_at', { ascending: false });
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from('label_projects')
+        .select('*, devices(name, model_number)')
+        .order('created_at', { ascending: false });
 
-        if (!error && data) {
-          return data.map((p: any) => ({
-            id: p.id,
-            userId: p.user_id,
-            deviceId: p.device_id,
-            deviceName: p.devices?.name,
-            deviceModel: p.devices?.model_number,
-            title: p.title,
-            destinationMarket: p.destination_market,
-            packagingLevel: p.packaging_level,
-            version: p.version,
-            status: p.status,
-            notes: p.notes,
-            createdAt: p.created_at,
-            updatedAt: p.updated_at
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase projects fetch failed, using local store', err);
+      if (error) {
+        throw new Error(`Supabase projects fetch failed: ${error.message}`);
       }
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        userId: p.user_id,
+        deviceId: p.device_id,
+        deviceName: p.devices?.name,
+        deviceModel: p.devices?.model_number,
+        title: p.title,
+        destinationMarket: p.destination_market,
+        packagingLevel: p.packaging_level,
+        version: p.version,
+        status: p.status,
+        notes: p.notes,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
+      }));
     }
 
     const projects = getStoredProjects();
@@ -386,30 +400,29 @@ export const dbService = {
       updatedAt: now
     };
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('label_projects').insert({
-          id: newId,
-          user_id: project.userId,
-          device_id: project.deviceId,
-          title: project.title,
-          destination_market: project.destinationMarket,
-          packaging_level: project.packagingLevel,
-          version: project.version,
-          status: project.status,
-          notes: project.notes || null
-        }).select().single();
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('label_projects').insert({
+        id: newId,
+        user_id: project.userId,
+        device_id: project.deviceId,
+        title: project.title,
+        destination_market: project.destinationMarket,
+        packaging_level: project.packagingLevel,
+        version: project.version,
+        status: project.status,
+        notes: project.notes || null
+      }).select('*, devices(name, model_number)').single();
 
-        if (!error && data) {
-          return {
-            ...newProject,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at
-          };
-        }
-      } catch (e) {
-        console.warn('Supabase insert project failed', e);
+      if (error) {
+        throw new Error(`Supabase create project failed: ${error.message}`);
       }
+      return {
+        ...newProject,
+        deviceName: data.devices?.name || newProject.deviceName,
+        deviceModel: data.devices?.model_number || newProject.deviceModel,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     }
 
     const current = getStoredProjects();
@@ -421,20 +434,35 @@ export const dbService = {
   async updateProject(id: string, updates: Partial<LabelProject>): Promise<LabelProject> {
     const now = new Date().toISOString();
 
-    if (supabase) {
-      try {
-        await supabase.from('label_projects').update({
-          title: updates.title,
-          destination_market: updates.destinationMarket,
-          packaging_level: updates.packagingLevel,
-          version: updates.version,
-          status: updates.status,
-          notes: updates.notes,
-          updated_at: now
-        }).eq('id', id);
-      } catch (e) {
-        console.warn('Supabase project update failed', e);
+    if (isLiveSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.from('label_projects').update({
+        title: updates.title,
+        destination_market: updates.destinationMarket,
+        packaging_level: updates.packagingLevel,
+        version: updates.version,
+        status: updates.status,
+        notes: updates.notes,
+        updated_at: now
+      }).eq('id', id).select('*, devices(name, model_number)').single();
+
+      if (error) {
+        throw new Error(`Supabase update project failed: ${error.message}`);
       }
+      return {
+        id: data.id,
+        userId: data.user_id,
+        deviceId: data.device_id,
+        deviceName: data.devices?.name,
+        deviceModel: data.devices?.model_number,
+        title: data.title,
+        destinationMarket: data.destination_market,
+        packagingLevel: data.packaging_level,
+        version: data.version,
+        status: data.status,
+        notes: data.notes,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     }
 
     const current = getStoredProjects();
@@ -447,12 +475,12 @@ export const dbService = {
   },
 
   async deleteProject(id: string): Promise<void> {
-    if (supabase) {
-      try {
-        await supabase.from('label_projects').delete().eq('id', id);
-      } catch (e) {
-        console.warn('Supabase delete project failed', e);
+    if (isLiveSupabaseConfigured && supabase) {
+      const { error } = await supabase.from('label_projects').delete().eq('id', id);
+      if (error) {
+        throw new Error(`Supabase delete project failed: ${error.message}`);
       }
+      return;
     }
 
     const current = getStoredProjects().filter(p => p.id !== id);

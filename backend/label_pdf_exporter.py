@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 
 class WatermarkedCanvas(canvas.Canvas):
     """Custom canvas that draws a prominent diagonal regulatory prototype warning watermark
-    across every page to ensure strict compliance with hackathon prototype constraints.
+    across every page to ensure strict compliance with prototype constraints.
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -114,7 +114,7 @@ class LabelPdfExporter:
         
         # Prototype notice
         disclaimer_box = [
-            [Paragraph("⚠️ HACKATHON PROTOTYPE SPECIFICATION — FOR EVALUATION ONLY.<br/>NOT OFFICIAL REGULATORY APPROVAL OR CERTIFIED COMPLIANCE UNDER INDIA CDSCO / US FDA / EU MDR.", disclaimer_style)]
+            [Paragraph("⚠️ MEDLABEL AI REGULATORY ASSISTANT — PROTOTYPE DRAFT ONLY.<br/>NOT OFFICIAL REGULATORY APPROVAL OR CERTIFIED COMPLIANCE UNDER INDIA CDSCO / US FDA / EU MDR.", disclaimer_style)]
         ]
         t_disc = Table(disclaimer_box, colWidths=[540])
         t_disc.setStyle(TableStyle([

@@ -8,18 +8,23 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+USE_DEMO_STORE = os.getenv("USE_DEMO_STORE", "false").lower() in ("true", "1", "yes")
+
+is_live_configured = bool(SUPABASE_URL and SUPABASE_KEY and "your-project" not in SUPABASE_URL)
 
 supabase_client = None
-if SUPABASE_URL and SUPABASE_KEY and "your-project" not in SUPABASE_URL:
+if is_live_configured and not USE_DEMO_STORE:
     try:
         from supabase import create_client, Client
-        supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         print("[Database] Connected to live Supabase database.")
     except Exception as e:
-        print(f"[Database] Warning: Supabase client init failed ({e}). Using local in-memory store.")
-        supabase_client = None
+        print(f"[Database] FATAL: Supabase connection failed: {e}")
+        raise RuntimeError(f"Live Supabase connection failed: {e}") from e
+elif USE_DEMO_STORE:
+    print("[Database] Explicit DEMO mode enabled (USE_DEMO_STORE=true). Using local in-memory mock store.")
 else:
-    print("[Database] No Supabase credentials configured. Using local in-memory mock store.")
+    print("[Database] No Supabase credentials configured. Running in demo mode with in-memory store.")
 
 # Default demo user ID
 DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
@@ -144,6 +149,63 @@ _in_memory_label_versions: Dict[str, Dict[str, Any]] = {}
 _in_memory_compliance_reports: Dict[str, Dict[str, Any]] = {}
 _in_memory_label_comparisons: Dict[str, Dict[str, Any]] = {}
 
+# Stage 3 in-memory storage — Review Queue & Immutable Audit Log
+_in_memory_reviews: Dict[str, Dict[str, Any]] = {
+    "rev-001": {
+        "id": "rev-001",
+        "project_id": "11111111-1111-1111-1111-111111111111",
+        "reviewer_id": "22222222-2222-2222-2222-222222222222",
+        "reviewer_name": "Dr. Marcus Vance",
+        "reviewer_email": "reviewer@medlabel.ai",
+        "decision": "approved",
+        "comments": "Sourced compliance with CDSCO MDR 2017 Rule 109 verified. Authorized Indian Importer license details verified.",
+        "version_tag": "v1.0-draft",
+        "created_at": "2024-10-15T10:30:00Z"
+    }
+}
+
+_in_memory_audit_logs: List[Dict[str, Any]] = [
+    {
+        "id": "aud-001",
+        "actor_id": DEMO_USER_ID,
+        "actor_email": "editor@medlabel.ai",
+        "actor_name": "Dr. Priya Sharma",
+        "actor_role": "editor",
+        "action": "DEVICE_CREATED",
+        "entity_type": "device",
+        "entity_id": "dddddddd-dddd-dddd-dddd-dddddddddd01",
+        "details": {"name": "CardioTrack Pacemaker Lead System", "market": "India"},
+        "ip_address": "127.0.0.1",
+        "created_at": "2024-09-01T08:00:00Z"
+    },
+    {
+        "id": "aud-002",
+        "actor_id": DEMO_USER_ID,
+        "actor_email": "editor@medlabel.ai",
+        "actor_name": "Dr. Priya Sharma",
+        "actor_role": "editor",
+        "action": "LABEL_GENERATED",
+        "entity_type": "label_version",
+        "entity_id": "11111111-1111-1111-1111-111111111111",
+        "details": {"market": "India", "version_tag": "v1.0-draft"},
+        "ip_address": "127.0.0.1",
+        "created_at": "2024-09-01T09:15:00Z"
+    },
+    {
+        "id": "aud-003",
+        "actor_id": "22222222-2222-2222-2222-222222222222",
+        "actor_email": "reviewer@medlabel.ai",
+        "actor_name": "Dr. Marcus Vance",
+        "actor_role": "reviewer",
+        "action": "REVIEW_APPROVED",
+        "entity_type": "review",
+        "entity_id": "rev-001",
+        "details": {"project_id": "11111111-1111-1111-1111-111111111111", "decision": "approved"},
+        "ip_address": "127.0.0.1",
+        "created_at": "2024-10-15T10:30:00Z"
+    }
+]
+
 class DatabaseManager:
     """Unified Database Handler supporting both live Supabase and fast local fallback store."""
 
@@ -157,21 +219,18 @@ class DatabaseManager:
 
     @staticmethod
     def list_devices(user_id: Optional[str] = None, market: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                query = supabase_client.table("devices").select("*")
-                if user_id:
-                    query = query.eq("user_id", user_id)
-                if market and market != "All":
-                    query = query.eq("intended_market", market)
-                res = query.order("created_at", desc=True).execute()
-                items = res.data or []
-                if search:
-                    q = search.lower()
-                    items = [d for d in items if q in d.get("name", "").lower() or q in d.get("model_number", "").lower() or q in d.get("manufacturer", "").lower()]
-                return items
-            except Exception as e:
-                print(f"[DB Error] Falling back to local store: {e}")
+        if supabase_client is not None:
+            query = supabase_client.table("devices").select("*")
+            if user_id:
+                query = query.eq("user_id", user_id)
+            if market and market != "All":
+                query = query.eq("intended_market", market)
+            res = query.order("created_at", desc=True).execute()
+            items = res.data or []
+            if search:
+                q = search.lower()
+                items = [d for d in items if q in d.get("name", "").lower() or q in d.get("model_number", "").lower() or q in d.get("manufacturer", "").lower()]
+            return items
         
         items = list(_in_memory_devices.values())
         if market and market != "All":
@@ -183,13 +242,9 @@ class DatabaseManager:
 
     @staticmethod
     def get_device(device_id: str) -> Optional[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                res = supabase_client.table("devices").select("*").eq("id", device_id).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception:
-                pass
+        if supabase_client is not None:
+            res = supabase_client.table("devices").select("*").eq("id", device_id).execute()
+            return res.data[0] if res.data else None
         return _in_memory_devices.get(device_id)
 
     @staticmethod
@@ -203,13 +258,9 @@ class DatabaseManager:
             "created_at": now_str,
             "updated_at": now_str
         }
-        if supabase_client:
-            try:
-                res = supabase_client.table("devices").insert(record).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception as e:
-                print(f"[DB Insert Warning] {e}")
+        if supabase_client is not None:
+            res = supabase_client.table("devices").insert(record).execute()
+            return res.data[0] if res.data else record
         
         _in_memory_devices[new_id] = record
         return record
@@ -217,13 +268,9 @@ class DatabaseManager:
     @staticmethod
     def update_device(device_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         now_str = datetime.now(timezone.utc).isoformat()
-        if supabase_client:
-            try:
-                res = supabase_client.table("devices").update({**updates, "updated_at": now_str}).eq("id", device_id).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception:
-                pass
+        if supabase_client is not None:
+            res = supabase_client.table("devices").update({**updates, "updated_at": now_str}).eq("id", device_id).execute()
+            return res.data[0] if res.data else None
         
         device = _in_memory_devices.get(device_id)
         if not device:
@@ -234,12 +281,9 @@ class DatabaseManager:
 
     @staticmethod
     def delete_device(device_id: str) -> bool:
-        if supabase_client:
-            try:
-                supabase_client.table("devices").delete().eq("id", device_id).execute()
-                return True
-            except Exception:
-                pass
+        if supabase_client is not None:
+            res = supabase_client.table("devices").delete().eq("id", device_id).execute()
+            return True
         
         if device_id in _in_memory_devices:
             del _in_memory_devices[device_id]
@@ -255,25 +299,25 @@ class DatabaseManager:
 
     @staticmethod
     def list_projects(user_id: Optional[str] = None, market: Optional[str] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        projects = []
-        if supabase_client:
-            try:
-                query = supabase_client.table("label_projects").select("*, devices(name, model_number)")
-                if market and market != "All":
-                    query = query.eq("destination_market", market)
-                if status and status != "All":
-                    query = query.eq("status", status)
-                res = query.order("created_at", desc=True).execute()
-                if res.data:
-                    for p in res.data:
-                        dev = p.get("devices") or {}
-                        p["device_name"] = dev.get("name")
-                        p["device_model"] = dev.get("model_number")
-                        projects.append(p)
-                    return projects
-            except Exception as e:
-                print(f"[DB Projects Warning] {e}")
+        if supabase_client is not None:
+            query = supabase_client.table("label_projects").select("*, devices(name, model_number)")
+            if user_id:
+                query = query.eq("user_id", user_id)
+            if market and market != "All":
+                query = query.eq("destination_market", market)
+            if status and status != "All":
+                query = query.eq("status", status)
+            res = query.order("created_at", desc=True).execute()
+            projects = []
+            if res.data:
+                for p in res.data:
+                    dev = p.get("devices") or {}
+                    p["device_name"] = dev.get("name")
+                    p["device_model"] = dev.get("model_number")
+                    projects.append(p)
+            return projects
         
+        projects = []
         for p in _in_memory_projects.values():
             if market and market != "All" and p.get("destination_market") != market:
                 continue
@@ -289,17 +333,15 @@ class DatabaseManager:
 
     @staticmethod
     def get_project(project_id: str) -> Optional[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                res = supabase_client.table("label_projects").select("*, devices(name, model_number)").eq("id", project_id).execute()
-                if res.data:
-                    p = res.data[0]
-                    dev = p.get("devices") or {}
-                    p["device_name"] = dev.get("name")
-                    p["device_model"] = dev.get("model_number")
-                    return p
-            except Exception:
-                pass
+        if supabase_client is not None:
+            res = supabase_client.table("label_projects").select("*, devices(name, model_number)").eq("id", project_id).execute()
+            if res.data:
+                p = res.data[0]
+                dev = p.get("devices") or {}
+                p["device_name"] = dev.get("name")
+                p["device_model"] = dev.get("model_number")
+                return p
+            return None
         
         p = _in_memory_projects.get(project_id)
         if not p:
@@ -322,18 +364,14 @@ class DatabaseManager:
             "created_at": now_str,
             "updated_at": now_str
         }
-        if supabase_client:
-            try:
-                res = supabase_client.table("label_projects").insert(record).execute()
-                if res.data:
-                    p = res.data[0]
-                    dev = _in_memory_devices.get(record["device_id"])
-                    if dev:
-                        p["device_name"] = dev.get("name")
-                        p["device_model"] = dev.get("model_number")
-                    return p
-            except Exception as e:
-                print(f"[DB Project Insert Error] {e}")
+        if supabase_client is not None:
+            res = supabase_client.table("label_projects").insert(record).execute()
+            p = res.data[0] if res.data else record
+            dev_res = supabase_client.table("devices").select("name, model_number").eq("id", record["device_id"]).execute()
+            if dev_res.data:
+                p["device_name"] = dev_res.data[0].get("name")
+                p["device_model"] = dev_res.data[0].get("model_number")
+            return p
 
         _in_memory_projects[new_id] = record
         dev = _in_memory_devices.get(record["device_id"])
@@ -346,13 +384,16 @@ class DatabaseManager:
     @staticmethod
     def update_project(project_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         now_str = datetime.now(timezone.utc).isoformat()
-        if supabase_client:
-            try:
-                res = supabase_client.table("label_projects").update({**updates, "updated_at": now_str}).eq("id", project_id).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception:
-                pass
+        if supabase_client is not None:
+            res = supabase_client.table("label_projects").update({**updates, "updated_at": now_str}).eq("id", project_id).execute()
+            if res.data:
+                p = res.data[0]
+                dev_res = supabase_client.table("devices").select("name, model_number").eq("id", p.get("device_id", "")).execute()
+                if dev_res.data:
+                    p["device_name"] = dev_res.data[0].get("name")
+                    p["device_model"] = dev_res.data[0].get("model_number")
+                return p
+            return None
         
         p = _in_memory_projects.get(project_id)
         if not p:
@@ -368,12 +409,9 @@ class DatabaseManager:
 
     @staticmethod
     def delete_project(project_id: str) -> bool:
-        if supabase_client:
-            try:
-                supabase_client.table("label_projects").delete().eq("id", project_id).execute()
-                return True
-            except Exception:
-                pass
+        if supabase_client is not None:
+            supabase_client.table("label_projects").delete().eq("id", project_id).execute()
+            return True
         
         if project_id in _in_memory_projects:
             del _in_memory_projects[project_id]
@@ -402,40 +440,32 @@ class DatabaseManager:
             "created_at": now_str
         }
 
-        if supabase_client:
-            try:
-                res = supabase_client.table("compliance_reports").insert({
-                    "id": new_id,
-                    "user_id": user_id,
-                    "project_id": record["project_id"],
-                    "destination_market": record["destination_market"],
-                    "total_checks": record["total_checks"],
-                    "passed_checks": record["passed_checks"],
-                    "failed_checks": record["failed_checks"],
-                    "needs_review_checks": record["needs_review_checks"],
-                    "results": record["results"],
-                    "created_at": now_str
-                }).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception as e:
-                print(f"[Supabase Report Insert] {e}")
+        if supabase_client is not None:
+            res = supabase_client.table("compliance_reports").insert({
+                "id": new_id,
+                "user_id": user_id,
+                "project_id": record["project_id"],
+                "destination_market": record["destination_market"],
+                "total_checks": record["total_checks"],
+                "passed_checks": record["passed_checks"],
+                "failed_checks": record["failed_checks"],
+                "needs_review_checks": record["needs_review_checks"],
+                "results": record["results"],
+                "created_at": now_str
+            }).execute()
+            return res.data[0] if res.data else record
 
         _in_memory_compliance_reports[new_id] = record
         return record
 
     @staticmethod
     def list_compliance_reports(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                query = supabase_client.table("compliance_reports").select("*")
-                if project_id:
-                    query = query.eq("project_id", project_id)
-                res = query.order("created_at", desc=True).execute()
-                if res.data:
-                    return res.data
-            except Exception:
-                pass
+        if supabase_client is not None:
+            query = supabase_client.table("compliance_reports").select("*")
+            if project_id:
+                query = query.eq("project_id", project_id)
+            res = query.order("created_at", desc=True).execute()
+            return res.data or []
         
         items = list(_in_memory_compliance_reports.values())
         if project_id:
@@ -457,29 +487,21 @@ class DatabaseManager:
             "created_at": now_str
         }
 
-        if supabase_client:
-            try:
-                res = supabase_client.table("label_versions").insert(record).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception as e:
-                print(f"[Supabase Version Insert] {e}")
+        if supabase_client is not None:
+            res = supabase_client.table("label_versions").insert(record).execute()
+            return res.data[0] if res.data else record
 
         _in_memory_label_versions[new_id] = record
         return record
 
     @staticmethod
     def list_label_versions(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                query = supabase_client.table("label_versions").select("*")
-                if project_id:
-                    query = query.eq("project_id", project_id)
-                res = query.order("created_at", desc=True).execute()
-                if res.data:
-                    return res.data
-            except Exception:
-                pass
+        if supabase_client is not None:
+            query = supabase_client.table("label_versions").select("*")
+            if project_id:
+                query = query.eq("project_id", project_id)
+            res = query.order("created_at", desc=True).execute()
+            return res.data or []
         
         items = list(_in_memory_label_versions.values())
         if project_id:
@@ -502,39 +524,31 @@ class DatabaseManager:
             "created_at": now_str
         }
 
-        if supabase_client:
-            try:
-                res = supabase_client.table("label_comparisons").insert({
-                    "id": new_id,
-                    "user_id": user_id,
-                    "project_id": record["project_id"],
-                    "base_label_name": record["base_label_name"],
-                    "target_label_name": record["target_label_name"],
-                    "field_changes": record["field_changes"],
-                    "text_diff": record["text_diff"],
-                    "critical_differences": record["summary"].get("critical_changes_detected", 0),
-                    "created_at": now_str
-                }).execute()
-                if res.data:
-                    return res.data[0]
-            except Exception as e:
-                print(f"[Supabase Comparison Insert] {e}")
+        if supabase_client is not None:
+            res = supabase_client.table("label_comparisons").insert({
+                "id": new_id,
+                "user_id": user_id,
+                "project_id": record["project_id"],
+                "base_label_name": record["base_label_name"],
+                "target_label_name": record["target_label_name"],
+                "field_changes": record["field_changes"],
+                "text_diff": record["text_diff"],
+                "critical_differences": record["summary"].get("critical_changes_detected", 0),
+                "created_at": now_str
+            }).execute()
+            return res.data[0] if res.data else record
 
         _in_memory_label_comparisons[new_id] = record
         return record
 
     @staticmethod
     def list_label_comparisons(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        if supabase_client:
-            try:
-                query = supabase_client.table("label_comparisons").select("*")
-                if project_id:
-                    query = query.eq("project_id", project_id)
-                res = query.order("created_at", desc=True).execute()
-                if res.data:
-                    return res.data
-            except Exception:
-                pass
+        if supabase_client is not None:
+            query = supabase_client.table("label_comparisons").select("*")
+            if project_id:
+                query = query.eq("project_id", project_id)
+            res = query.order("created_at", desc=True).execute()
+            return res.data or []
         
         items = list(_in_memory_label_comparisons.values())
         if project_id:
@@ -548,7 +562,7 @@ class DatabaseManager:
 
         market_counts = {"India": 0, "USA": 0, "EU": 0}
         pkg_counts = {"primary": 0, "secondary": 0, "shipper": 0}
-        status_counts = {"draft": 0, "in_review": 0, "approved": 0, "rejected": 0}
+        status_counts = {"draft": 0, "in_review": 0, "approved": 0, "rejected": 0, "changes_requested": 0}
         imported_count = 0
 
         for d in devices:
@@ -576,3 +590,111 @@ class DatabaseManager:
             "status_distribution": status_counts,
             "packaging_distribution": pkg_counts
         }
+
+    # ==========================================================================
+    # Stage 3: Review Queue & Approvals
+    # ==========================================================================
+
+    @staticmethod
+    def create_review(review_data: Dict[str, Any]) -> Dict[str, Any]:
+        now_str = datetime.now(timezone.utc).isoformat()
+        new_id = str(uuid.uuid4())
+        record = {
+            "id": new_id,
+            "project_id": review_data["project_id"],
+            "reviewer_id": review_data.get("reviewer_id") or "22222222-2222-2222-2222-222222222222",
+            "reviewer_name": review_data.get("reviewer_name") or "Dr. Marcus Vance",
+            "reviewer_email": review_data.get("reviewer_email") or "reviewer@medlabel.ai",
+            "decision": review_data["decision"],
+            "comments": review_data.get("comments", ""),
+            "version_tag": review_data.get("version_tag", "v1.0-draft"),
+            "created_at": now_str
+        }
+
+        if supabase_client is not None:
+            res = supabase_client.table("reviews").insert(record).execute()
+            return res.data[0] if res.data else record
+
+        _in_memory_reviews[new_id] = record
+        return record
+
+    @staticmethod
+    def list_reviews(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        if supabase_client is not None:
+            query = supabase_client.table("reviews").select("*")
+            if project_id:
+                query = query.eq("project_id", project_id)
+            res = query.order("created_at", desc=True).execute()
+            return res.data or []
+
+        items = list(_in_memory_reviews.values())
+        if project_id:
+            items = [r for r in items if r.get("project_id") == project_id]
+        return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
+
+    # ==========================================================================
+    # Stage 3: Append-Only Immutable Audit Log
+    # ==========================================================================
+
+    @staticmethod
+    def log_audit_event(
+        actor_email: str,
+        action: str,
+        entity_type: str,
+        entity_id: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        actor_name: Optional[str] = None,
+        actor_role: str = "editor",
+        details: Optional[Dict[str, Any]] = None,
+        ip_address: str = "127.0.0.1"
+    ) -> Dict[str, Any]:
+        now_str = datetime.now(timezone.utc).isoformat()
+        new_id = str(uuid.uuid4())
+        record = {
+            "id": new_id,
+            "actor_id": actor_id or DEMO_USER_ID,
+            "actor_email": actor_email,
+            "actor_name": actor_name or ("Dr. Marcus Vance" if actor_role == "reviewer" else "Dr. Priya Sharma"),
+            "actor_role": actor_role,
+            "action": action,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "details": details or {},
+            "ip_address": ip_address,
+            "created_at": now_str
+        }
+
+        if supabase_client is not None:
+            res = supabase_client.table("audit_logs").insert(record).execute()
+            return res.data[0] if res.data else record
+
+        _in_memory_audit_logs.insert(0, record)
+        return record
+
+    @staticmethod
+    def list_audit_logs(
+        action: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        actor_email: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if supabase_client is not None:
+            query = supabase_client.table("audit_logs").select("*")
+            if action and action != "All":
+                query = query.eq("action", action)
+            if entity_type and entity_type != "All":
+                query = query.eq("entity_type", entity_type)
+            if actor_email:
+                query = query.eq("actor_email", actor_email)
+            res = query.order("created_at", desc=True).limit(limit).execute()
+            return res.data or []
+
+        items = list(_in_memory_audit_logs)
+        if action and action != "All":
+            items = [a for a in items if a.get("action") == action]
+        if entity_type and entity_type != "All":
+            items = [a for a in items if a.get("entity_type") == entity_type]
+        if actor_email:
+            items = [a for a in items if a.get("actor_email") == actor_email]
+
+        return items[:limit]

@@ -28,7 +28,8 @@ export const StatusBadge: React.FC<{ status: ProjectStatus }> = ({ status }) => 
     draft: 'Draft',
     in_review: 'In Review',
     approved: 'Approved',
-    rejected: 'Changes Requested'
+    rejected: 'Rejected',
+    changes_requested: 'Changes Requested'
   };
 
   return (

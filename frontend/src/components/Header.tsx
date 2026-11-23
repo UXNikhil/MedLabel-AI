@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ShieldAlert, User, LogOut, CheckCircle2, Database } from 'lucide-react';
+import { User, LogOut, Database } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types';
+import { MedLabelLogo } from './MedLabelLogo';
 
 export const Header: React.FC = () => {
   const { user, signOut, setRole, isLiveSupabase } = useAuth();
@@ -31,9 +32,7 @@ export const Header: React.FC = () => {
       <a href="#main-content" className="skip-to-content">Skip to Main Content</a>
 
       <div className="brand-section">
-        <div className="brand-logo-icon" aria-hidden="true">
-          <ShieldAlert size={22} />
-        </div>
+        <MedLabelLogo size={36} />
         <div className="brand-text">
           <h1>MedLabel AI</h1>
           <p>Medical Device Regulatory Label Management</p>

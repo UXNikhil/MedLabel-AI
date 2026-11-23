@@ -89,27 +89,25 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
         Rule Library
       </button>
 
-      {/* Stage 3 Modules: Locked per PRD constraints */}
+      {/* Stage 3 Active Modules */}
       <button
         type="button"
         className={`nav-tab ${currentTab === 'review' ? 'active' : ''}`}
         onClick={() => onSelectTab('review')}
-        title="Reviewer approval workflow and comments unlock in Stage 3"
+        title="Formal reviewer approval workflow and independent sign-off"
       >
         <ClipboardCheck size={16} />
         Review Queue
-        <span className="stage-tag">Stage 3</span>
       </button>
 
       <button
         type="button"
         className={`nav-tab ${currentTab === 'audit' ? 'active' : ''}`}
         onClick={() => onSelectTab('audit')}
-        title="Immutable version snapshots and traceability log unlock in Stage 3"
+        title="Immutable regulatory audit trail and traceability log"
       >
         <History size={16} />
         Audit Log
-        <span className="stage-tag">Stage 3</span>
       </button>
     </nav>
   );

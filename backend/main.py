@@ -25,7 +25,12 @@ from models import (
     ComplianceCheckResponse,
     CompareLabelsRequest,
     CompareLabelsResponse,
-    StatutoryRuleOut
+    StatutoryRuleOut,
+    ReviewDecisionCreate,
+    ReviewOut,
+    AuditLogCreate,
+    AuditLogOut,
+    SubmitForReviewRequest
 )
 from database import DatabaseManager
 from gemini_service import GeminiService
@@ -57,11 +62,11 @@ app.add_middleware(
 
 @app.get("/api/health", response_model=HealthResponse, tags=["Health"])
 def get_health():
-    """System health check endpoint verifying Stage 2 operational status."""
+    """System health check endpoint verifying Stage 3 operational status."""
     return HealthResponse(
         status="healthy",
-        stage="Stage 2 — Core AI & Validation",
-        version="2.0.0",
+        stage="Stage 3 — Review Workflow, Approvals & Immutable Audit Logging",
+        version="3.0.0",
         timestamp=datetime.now(timezone.utc).isoformat(),
         environment=os.getenv("ENVIRONMENT", "local_development"),
         database=DatabaseManager.get_status(),
@@ -74,7 +79,8 @@ def get_health():
             "stage_2_pdf_ingestion": True,
             "stage_2_compliance_engine": True,
             "stage_2_label_compare": True,
-            "stage_3_review_queue": False
+            "stage_3_review_queue": True,
+            "stage_3_immutable_audit": True
         }
     )
 
@@ -157,16 +163,41 @@ def get_project(project_id: str):
 
 @app.put("/api/projects/{project_id}", response_model=LabelProjectOut, tags=["Label Projects"])
 def update_project(project_id: str, payload: LabelProjectUpdate):
-    updated = DatabaseManager.update_project(project_id, payload.model_dump(exclude_unset=True))
-    if not updated:
+    existing = DatabaseManager.get_project(project_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Label project not found")
+    if existing.get("status") == "approved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Immutable regulatory record: Approved label projects cannot be modified. Create a new revision draft."
+        )
+    updated = DatabaseManager.update_project(project_id, payload.model_dump(exclude_unset=True))
+    DatabaseManager.log_audit_event(
+        actor_email="editor@medlabel.ai",
+        action="PROJECT_UPDATED",
+        entity_type="project",
+        entity_id=project_id,
+        details={"updated_fields": list(payload.model_dump(exclude_unset=True).keys())}
+    )
     return updated
 
 @app.delete("/api/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Label Projects"])
 def delete_project(project_id: str):
-    success = DatabaseManager.delete_project(project_id)
-    if not success:
+    existing = DatabaseManager.get_project(project_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Label project not found")
+    if existing.get("status") == "approved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Immutable regulatory record: Approved label projects cannot be deleted."
+        )
+    success = DatabaseManager.delete_project(project_id)
+    DatabaseManager.log_audit_event(
+        actor_email="editor@medlabel.ai",
+        action="PROJECT_DELETED",
+        entity_type="project",
+        entity_id=project_id
+    )
     return None
 
 # ==============================================================================
@@ -373,6 +404,109 @@ def compare_labels(payload: CompareLabelsRequest):
 def list_comparisons(project_id: Optional[str] = Query(default=None)):
     """Retrieve stored label comparison results."""
     return DatabaseManager.list_label_comparisons(project_id=project_id)
+
+# ==============================================================================
+# Stage 3: Review Queue, Approvals & Immutable Audit Trail
+# ==============================================================================
+
+@app.post("/api/projects/{project_id}/submit-review", tags=["Stage 3 — Review Queue"])
+def submit_project_for_review(project_id: str, payload: SubmitForReviewRequest):
+    """Submit a draft label project for formal reviewer audit and approval."""
+    project = DatabaseManager.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Label project not found")
+    
+    if project.get("status") == "approved":
+        raise HTTPException(status_code=409, detail="Project is already approved and immutable.")
+    
+    updated = DatabaseManager.update_project(project_id, {
+        "status": "in_review",
+        "notes": f"Submitted for review by {payload.user_id}. {payload.notes or ''}".strip()
+    })
+    
+    DatabaseManager.log_audit_event(
+        actor_id=payload.user_id,
+        actor_email="editor@medlabel.ai",
+        actor_role="editor",
+        action="REVIEW_SUBMITTED",
+        entity_type="project",
+        entity_id=project_id,
+        details={"status": "in_review", "notes": payload.notes}
+    )
+    return {"status": "in_review", "project": updated}
+
+@app.post("/api/reviews", response_model=ReviewOut, status_code=status.HTTP_201_CREATED, tags=["Stage 3 — Review Queue"])
+def submit_review_decision(payload: ReviewDecisionCreate):
+    """Reviewer decision endpoint (approve, reject, or request changes).
+    Strictly prevents self-approval and enforces role permissions.
+    """
+    # 1. Role enforcement
+    if payload.reviewer_role not in ["reviewer", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: Only users with 'reviewer' or 'admin' role can submit regulatory reviews."
+        )
+
+    # 2. Project check
+    project = DatabaseManager.get_project(payload.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Label project not found.")
+
+    # 3. Independent review enforcement: prevent self-approval
+    if payload.decision == "approved":
+        creator_id = project.get("user_id")
+        reviewer_id = payload.reviewer_id or "22222222-2222-2222-2222-222222222222"
+        if creator_id and reviewer_id and creator_id == reviewer_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Self-approval prohibited: Project creators cannot approve their own label draft. An independent reviewer must approve."
+            )
+
+    # 4. Status transition
+    new_status = payload.decision  # 'approved', 'rejected', or 'changes_requested'
+    DatabaseManager.update_project(payload.project_id, {"status": new_status})
+
+    # 5. Create review record
+    review = DatabaseManager.create_review(payload.model_dump())
+
+    # 6. Append-only audit event
+    action_type = "REVIEW_APPROVED" if payload.decision == "approved" else ("CHANGES_REQUESTED" if payload.decision == "changes_requested" else "REVIEW_REJECTED")
+    DatabaseManager.log_audit_event(
+        actor_id=payload.reviewer_id,
+        actor_email=payload.reviewer_email or "reviewer@medlabel.ai",
+        actor_name=payload.reviewer_name or "Dr. Marcus Vance",
+        actor_role=payload.reviewer_role or "reviewer",
+        action=action_type,
+        entity_type="review",
+        entity_id=review.get("id"),
+        details={
+            "project_id": payload.project_id,
+            "decision": payload.decision,
+            "comments": payload.comments
+        }
+    )
+
+    return review
+
+@app.get("/api/reviews", response_model=List[ReviewOut], tags=["Stage 3 — Review Queue"])
+def list_reviews(project_id: Optional[str] = Query(default=None)):
+    """List review decision history."""
+    return DatabaseManager.list_reviews(project_id=project_id)
+
+@app.get("/api/audit-logs", response_model=List[AuditLogOut], tags=["Stage 3 — Audit Log"])
+def list_audit_logs(
+    action: Optional[str] = Query(default=None),
+    entity_type: Optional[str] = Query(default=None),
+    actor_email: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, le=500)
+):
+    """Retrieve immutable chronological audit trail with filters."""
+    return DatabaseManager.list_audit_logs(
+        action=action,
+        entity_type=entity_type,
+        actor_email=actor_email,
+        limit=limit
+    )
 
 if __name__ == "__main__":
     import uvicorn

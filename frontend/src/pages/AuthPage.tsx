@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ShieldCheck, UserCheck, Lock, Mail, ArrowRight } from 'lucide-react';
+import { Lock, Mail, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types';
+import { MedLabelLogo } from '../components/MedLabelLogo';
 
 export const AuthPage: React.FC = () => {
   const { login, signUp, isLiveSupabase, loading } = useAuth();
@@ -16,14 +17,6 @@ export const AuthPage: React.FC = () => {
       await signUp(email, fullName, role);
     } else {
       await login(email, role);
-    }
-  };
-
-  const handleQuickDemoLogin = (demoEmail: string, demoName: string, demoRole: UserRole) => {
-    if (isSignUp) {
-      signUp(demoEmail, demoName, demoRole);
-    } else {
-      login(demoEmail, demoRole);
     }
   };
 
@@ -44,58 +37,16 @@ export const AuthPage: React.FC = () => {
         boxShadow: 'var(--shadow-lg)',
         padding: '32px'
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div className="brand-logo-icon" style={{ margin: '0 auto 12px', width: '48px', height: '48px' }}>
-            <ShieldCheck size={28} />
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <MedLabelLogo size={52} />
           </div>
-          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary-900)' }}>
-            MedLabel AI Authentication
+          <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--primary-900)' }}>
+            MedLabel AI
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-            Medical Device Label Management Hackathon Web App
+            Medical Device Regulatory Label Management & Compliance Platform
           </p>
-        </div>
-
-        {/* Demo Fast Login for Evaluators */}
-        <div style={{
-          background: '#f8fafc',
-          border: '1px solid #e2e8f0',
-          borderRadius: 'var(--radius-md)',
-          padding: '16px',
-          marginBottom: '24px'
-        }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', textTransform: 'uppercase', marginBottom: '8px' }}>
-            ⚡ One-Click Hackathon Role Login
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '11px', padding: '6px 4px', justifyContent: 'center' }}
-              onClick={() => handleQuickDemoLogin('editor@medlabel.ai', 'Dr. Priya Sharma', 'editor')}
-            >
-              Editor
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '11px', padding: '6px 4px', justifyContent: 'center' }}
-              onClick={() => handleQuickDemoLogin('reviewer@medlabel.ai', 'Dr. Marcus Vance', 'reviewer')}
-            >
-              Reviewer
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '11px', padding: '6px 4px', justifyContent: 'center' }}
-              onClick={() => handleQuickDemoLogin('admin@medlabel.ai', 'Elena Rostova', 'admin')}
-            >
-              Admin
-            </button>
-          </div>
-          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', textAlign: 'center' }}>
-            Switches Supabase RLS context and permissions
-          </div>
         </div>
 
         <form onSubmit={handleSubmit}>

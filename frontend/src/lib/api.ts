@@ -323,5 +323,71 @@ export const api = {
       field_changes,
       text_diff: `--- ${payload.base_name}\n+++ ${payload.revised_name}\n` + field_changes.filter(c => c.change_type !== 'unchanged').map(c => `@@ ${c.field} @@\n- ${c.base_value}\n+ ${c.revised_value}`).join('\n')
     };
+  },
+
+  // ============================================================================
+  // Stage 3: Review Queue, Approvals & Immutable Audit Logging
+  // ============================================================================
+
+  listProjects: async (params?: { market?: string; status?: string }) => {
+    const url = new URL(`${API_BASE_URL}/api/projects`);
+    if (params?.market && params.market !== 'All') url.searchParams.set('market', params.market);
+    if (params?.status && params.status !== 'All') url.searchParams.set('status', params.status);
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error('Failed to load projects');
+    return res.json();
+  },
+
+  submitProjectForReview: async (projectId: string, userId: string, notes?: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/submit-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId, user_id: userId, notes })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to submit project for review');
+    }
+    return res.json();
+  },
+
+  submitReviewDecision: async (reviewData: {
+    project_id: string;
+    decision: 'approved' | 'rejected' | 'changes_requested';
+    comments: string;
+    reviewer_id: string;
+    reviewer_name: string;
+    reviewer_email: string;
+    reviewer_role: string;
+  }) => {
+    const res = await fetch(`${API_BASE_URL}/api/reviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reviewData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to submit review decision');
+    }
+    return res.json();
+  },
+
+  listReviews: async (projectId?: string) => {
+    const url = new URL(`${API_BASE_URL}/api/reviews`);
+    if (projectId) url.searchParams.set('project_id', projectId);
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error('Failed to load reviews');
+    return res.json();
+  },
+
+  listAuditLogs: async (params?: { action?: string; entity_type?: string; actor_email?: string; limit?: number }) => {
+    const url = new URL(`${API_BASE_URL}/api/audit-logs`);
+    if (params?.action && params.action !== 'All') url.searchParams.set('action', params.action);
+    if (params?.entity_type && params.entity_type !== 'All') url.searchParams.set('entity_type', params.entity_type);
+    if (params?.actor_email) url.searchParams.set('actor_email', params.actor_email);
+    if (params?.limit) url.searchParams.set('limit', String(params.limit));
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error('Failed to load audit logs');
+    return res.json();
   }
 };
