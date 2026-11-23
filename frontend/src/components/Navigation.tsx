@@ -48,49 +48,45 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
         Label Projects
       </button>
 
-      {/* Upcoming Modules per Stage Constraints */}
+      {/* Stage 2 Active Modules */}
       <button
         type="button"
         className={`nav-tab ${currentTab === 'label_builder' ? 'active' : ''}`}
         onClick={() => onSelectTab('label_builder')}
-        title="Automated label drafting with PDF extraction unlocks in Stage 2"
+        title="PDF/Image Ingestion & AI Label Draft Generator"
       >
         <FileCode2 size={16} />
         Label Builder
-        <span className="stage-tag">Stage 2</span>
       </button>
 
       <button
         type="button"
         className={`nav-tab ${currentTab === 'compliance' ? 'active' : ''}`}
         onClick={() => onSelectTab('compliance')}
-        title="Deterministic statutory checks for CDSCO, FDA, EU MDR unlock in Stage 2"
+        title="Multinational Deterministic Compliance Engine for CDSCO, FDA, EU MDR"
       >
         <CheckCheck size={16} />
         Compliance Checks
-        <span className="stage-tag">Stage 2</span>
       </button>
 
       <button
         type="button"
         className={`nav-tab ${currentTab === 'compare' ? 'active' : ''}`}
         onClick={() => onSelectTab('compare')}
-        title="Side-by-side field diff and version compare unlock in Stage 2"
+        title="Side-by-side field diff and unified text comparison"
       >
         <SplitSquareVertical size={16} />
         Compare
-        <span className="stage-tag">Stage 2</span>
       </button>
 
       <button
         type="button"
         className={`nav-tab ${currentTab === 'rules' ? 'active' : ''}`}
         onClick={() => onSelectTab('rules')}
-        title="Curated statutory rulebook library unlocks in Stage 2"
+        title="Curated statutory rulebook library"
       >
         <BookOpenCheck size={16} />
         Rule Library
-        <span className="stage-tag">Stage 2</span>
       </button>
 
       {/* Stage 3 Modules: Locked per PRD constraints */}

@@ -7,6 +7,10 @@ import { AlertBanner } from './components/AlertBanner';
 import { DashboardPage } from './pages/DashboardPage';
 import { DevicesPage } from './pages/DevicesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { LabelBuilderPage } from './pages/LabelBuilderPage';
+import { CompliancePage } from './pages/CompliancePage';
+import { ComparePage } from './pages/ComparePage';
+import { RuleLibraryPage } from './pages/RuleLibraryPage';
 import { DisabledFeaturePage } from './pages/DisabledFeaturePage';
 import { AuthPage } from './pages/AuthPage';
 
@@ -66,12 +70,23 @@ export const App: React.FC = () => {
           />
         )}
 
-        {(currentTab === 'label_builder' || 
-          currentTab === 'compliance' || 
-          currentTab === 'compare' || 
-          currentTab === 'rules' || 
-          currentTab === 'review' || 
-          currentTab === 'audit') && (
+        {currentTab === 'label_builder' && (
+          <LabelBuilderPage />
+        )}
+
+        {currentTab === 'compliance' && (
+          <CompliancePage />
+        )}
+
+        {currentTab === 'compare' && (
+          <ComparePage />
+        )}
+
+        {currentTab === 'rules' && (
+          <RuleLibraryPage />
+        )}
+
+        {(currentTab === 'review' || currentTab === 'audit') && (
           <DisabledFeaturePage
             tab={currentTab}
             onNavigateToDevices={() => setCurrentTab('devices')}

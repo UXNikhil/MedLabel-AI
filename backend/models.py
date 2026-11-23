@@ -1,5 +1,4 @@
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
@@ -93,3 +92,70 @@ class StatsResponse(BaseModel):
     market_distribution: Dict[str, int]
     status_distribution: Dict[str, int]
     packaging_distribution: Dict[str, int]
+
+# ==============================================================================
+# Stage 2 Models
+# ==============================================================================
+
+class LabelUploadResponse(BaseModel):
+    filename: str
+    file_type: str
+    raw_text: str
+    page_count: int
+    proposed_fields: Dict[str, Any]
+    uncertain_fields: List[str]
+    extraction_engine: str
+    gemini_status: Dict[str, Any]
+    notes: str
+
+class LabelGenerateRequest(BaseModel):
+    device_id: Optional[str] = None
+    project_id: Optional[str] = None
+    destination_market: str = "India"
+    packaging_level: str = "primary"
+    field_overrides: Optional[Dict[str, Any]] = None
+
+class LabelGenerateResponse(BaseModel):
+    label_data: Dict[str, Any]
+    destination_market: str
+    packaging_level: str
+    watermark_notice: str
+    generated_at: str
+
+class ExportPdfRequest(BaseModel):
+    label_data: Dict[str, Any]
+    destination_market: str = "India"
+
+class ComplianceCheckRequest(BaseModel):
+    device_id: Optional[str] = None
+    project_id: Optional[str] = None
+    destination_market: str
+    label_data: Optional[Dict[str, Any]] = None
+
+class ComplianceCheckResponse(BaseModel):
+    summary: Dict[str, Any]
+    results: List[Dict[str, Any]]
+
+class CompareLabelsRequest(BaseModel):
+    project_id: Optional[str] = None
+    base_label: Dict[str, Any]
+    revised_label: Dict[str, Any]
+    base_name: str = "Original / Baseline Label"
+    revised_name: str = "Revised / Draft Label"
+
+class CompareLabelsResponse(BaseModel):
+    base_name: str
+    revised_name: str
+    summary: Dict[str, Any]
+    field_changes: List[Dict[str, Any]]
+    text_diff: str
+
+class StatutoryRuleOut(BaseModel):
+    rule_code: str
+    jurisdiction: str
+    title: str
+    description: str
+    source_reference: str
+    source_url: str
+    applicability: str
+    severity: str

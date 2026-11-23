@@ -73,3 +73,83 @@ export type NavigationTab =
   | 'review' 
   | 'rules' 
   | 'audit';
+
+// ==============================================================================
+// Stage 2 Types
+// ==============================================================================
+
+export interface StatutoryRule {
+  rule_code: string;
+  jurisdiction: string;
+  title: string;
+  description: string;
+  source_reference: string;
+  source_url: string;
+  applicability: string;
+  severity: string;
+}
+
+export interface ComplianceCheckFinding {
+  rule_code: string;
+  title: string;
+  source_reference: string;
+  source_url: string;
+  severity: string;
+  status: 'PASS' | 'FAIL' | 'NEEDS_REVIEW' | 'NOT_APPLICABLE';
+  finding: string;
+  evidence: string;
+  ai_advisory?: string;
+}
+
+export interface ComplianceSummary {
+  destination_market: string;
+  device_name?: string;
+  country_of_origin?: string;
+  is_imported_to_target: boolean;
+  total_checks: number;
+  passed_checks: number;
+  failed_checks: number;
+  needs_review_checks: number;
+  not_applicable_checks: number;
+  overall_status: 'PASS' | 'FAIL' | 'NEEDS_REVIEW';
+  disclaimer: string;
+}
+
+export interface FieldChange {
+  field: string;
+  label: string;
+  base_value?: string;
+  revised_value?: string;
+  change_type: 'added' | 'removed' | 'modified' | 'unchanged';
+  is_critical: boolean;
+}
+
+export interface ComparisonResult {
+  base_name: string;
+  revised_name: string;
+  summary: {
+    total_fields_compared: number;
+    added_fields: number;
+    removed_fields: number;
+    modified_fields: number;
+    critical_changes_detected: number;
+    critical_alerts: string[];
+  };
+  field_changes: FieldChange[];
+  text_diff: string;
+}
+
+export interface UploadExtractionData {
+  filename: string;
+  file_type: string;
+  raw_text: string;
+  page_count: number;
+  proposed_fields: Record<string, any>;
+  uncertain_fields: string[];
+  extraction_engine: string;
+  gemini_status: {
+    configured: boolean;
+    message: string;
+  };
+  notes: string;
+}

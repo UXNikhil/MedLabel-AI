@@ -139,12 +139,21 @@ _in_memory_projects: Dict[str, Dict[str, Any]] = {
     }
 }
 
+# Stage 2 in-memory storage
+_in_memory_label_versions: Dict[str, Dict[str, Any]] = {}
+_in_memory_compliance_reports: Dict[str, Dict[str, Any]] = {}
+_in_memory_label_comparisons: Dict[str, Dict[str, Any]] = {}
+
 class DatabaseManager:
     """Unified Database Handler supporting both live Supabase and fast local fallback store."""
 
     @staticmethod
     def get_status() -> str:
         return "supabase_connected" if supabase_client else "local_mock_store"
+
+    # ==========================================================================
+    # Devices CRUD
+    # ==========================================================================
 
     @staticmethod
     def list_devices(user_id: Optional[str] = None, market: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -239,6 +248,10 @@ class DatabaseManager:
                 del _in_memory_projects[pid]
             return True
         return False
+
+    # ==========================================================================
+    # Label Projects CRUD
+    # ==========================================================================
 
     @staticmethod
     def list_projects(user_id: Optional[str] = None, market: Optional[str] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -367,6 +380,167 @@ class DatabaseManager:
             return True
         return False
 
+    # ==========================================================================
+    # Stage 2: Compliance Reports & Label Versions
+    # ==========================================================================
+
+    @staticmethod
+    def save_compliance_report(report_data: Dict[str, Any], user_id: str = DEMO_USER_ID) -> Dict[str, Any]:
+        now_str = datetime.now(timezone.utc).isoformat()
+        new_id = str(uuid.uuid4())
+        record = {
+            "id": new_id,
+            "user_id": user_id,
+            "project_id": report_data.get("project_id") or "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "destination_market": report_data["summary"]["destination_market"],
+            "total_checks": report_data["summary"]["total_checks"],
+            "passed_checks": report_data["summary"]["passed_checks"],
+            "failed_checks": report_data["summary"]["failed_checks"],
+            "needs_review_checks": report_data["summary"]["needs_review_checks"],
+            "results": report_data["results"],
+            "summary": report_data["summary"],
+            "created_at": now_str
+        }
+
+        if supabase_client:
+            try:
+                res = supabase_client.table("compliance_reports").insert({
+                    "id": new_id,
+                    "user_id": user_id,
+                    "project_id": record["project_id"],
+                    "destination_market": record["destination_market"],
+                    "total_checks": record["total_checks"],
+                    "passed_checks": record["passed_checks"],
+                    "failed_checks": record["failed_checks"],
+                    "needs_review_checks": record["needs_review_checks"],
+                    "results": record["results"],
+                    "created_at": now_str
+                }).execute()
+                if res.data:
+                    return res.data[0]
+            except Exception as e:
+                print(f"[Supabase Report Insert] {e}")
+
+        _in_memory_compliance_reports[new_id] = record
+        return record
+
+    @staticmethod
+    def list_compliance_reports(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        if supabase_client:
+            try:
+                query = supabase_client.table("compliance_reports").select("*")
+                if project_id:
+                    query = query.eq("project_id", project_id)
+                res = query.order("created_at", desc=True).execute()
+                if res.data:
+                    return res.data
+            except Exception:
+                pass
+        
+        items = list(_in_memory_compliance_reports.values())
+        if project_id:
+            items = [r for r in items if r.get("project_id") == project_id]
+        return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
+
+    @staticmethod
+    def save_label_version(version_data: Dict[str, Any], user_id: str = DEMO_USER_ID) -> Dict[str, Any]:
+        now_str = datetime.now(timezone.utc).isoformat()
+        new_id = str(uuid.uuid4())
+        record = {
+            "id": new_id,
+            "user_id": user_id,
+            "project_id": version_data.get("project_id") or "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "version_tag": version_data.get("version_tag", "v1.0-draft"),
+            "label_data": version_data.get("label_data", {}),
+            "source_type": version_data.get("source_type", "ai_generated"),
+            "pdf_watermarked": True,
+            "created_at": now_str
+        }
+
+        if supabase_client:
+            try:
+                res = supabase_client.table("label_versions").insert(record).execute()
+                if res.data:
+                    return res.data[0]
+            except Exception as e:
+                print(f"[Supabase Version Insert] {e}")
+
+        _in_memory_label_versions[new_id] = record
+        return record
+
+    @staticmethod
+    def list_label_versions(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        if supabase_client:
+            try:
+                query = supabase_client.table("label_versions").select("*")
+                if project_id:
+                    query = query.eq("project_id", project_id)
+                res = query.order("created_at", desc=True).execute()
+                if res.data:
+                    return res.data
+            except Exception:
+                pass
+        
+        items = list(_in_memory_label_versions.values())
+        if project_id:
+            items = [v for v in items if v.get("project_id") == project_id]
+        return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
+
+    @staticmethod
+    def save_label_comparison(comparison_data: Dict[str, Any], user_id: str = DEMO_USER_ID) -> Dict[str, Any]:
+        now_str = datetime.now(timezone.utc).isoformat()
+        new_id = str(uuid.uuid4())
+        record = {
+            "id": new_id,
+            "user_id": user_id,
+            "project_id": comparison_data.get("project_id") or "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "base_label_name": comparison_data.get("base_name", "Original Label"),
+            "target_label_name": comparison_data.get("revised_name", "Revised Label"),
+            "field_changes": comparison_data.get("field_changes", []),
+            "summary": comparison_data.get("summary", {}),
+            "text_diff": comparison_data.get("text_diff", ""),
+            "created_at": now_str
+        }
+
+        if supabase_client:
+            try:
+                res = supabase_client.table("label_comparisons").insert({
+                    "id": new_id,
+                    "user_id": user_id,
+                    "project_id": record["project_id"],
+                    "base_label_name": record["base_label_name"],
+                    "target_label_name": record["target_label_name"],
+                    "field_changes": record["field_changes"],
+                    "text_diff": record["text_diff"],
+                    "critical_differences": record["summary"].get("critical_changes_detected", 0),
+                    "created_at": now_str
+                }).execute()
+                if res.data:
+                    return res.data[0]
+            except Exception as e:
+                print(f"[Supabase Comparison Insert] {e}")
+
+        _in_memory_label_comparisons[new_id] = record
+        return record
+
+    @staticmethod
+    def list_label_comparisons(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        if supabase_client:
+            try:
+                query = supabase_client.table("label_comparisons").select("*")
+                if project_id:
+                    query = query.eq("project_id", project_id)
+                res = query.order("created_at", desc=True).execute()
+                if res.data:
+                    return res.data
+            except Exception:
+                pass
+        
+        items = list(_in_memory_label_comparisons.values())
+        if project_id:
+            items = [c for c in items if c.get("project_id") == project_id]
+        return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
+
     @staticmethod
     def get_stats() -> Dict[str, Any]:
         devices = DatabaseManager.list_devices()
@@ -383,7 +557,7 @@ class DatabaseManager:
                 market_counts[m] += 1
             origin = (d.get("country_of_origin") or "").strip().lower()
             dest = (d.get("intended_market") or "").strip().lower()
-            if origin and dest and origin != dest and origin != "india" if dest == "india" else origin != dest:
+            if origin and dest and origin != dest and (dest != "india" or origin != "india"):
                 imported_count += 1
 
         for p in projects:
